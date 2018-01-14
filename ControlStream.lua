@@ -5,14 +5,15 @@ local ControlStream = torch.class('ControlStream')
 
 local DEFAULT_HOSTNAME = '192.168.0.100'
 local DEFAULT_CONTROL_PORT = 10000
-local READ_TIMEOUT = 0.01
+local READ_TIMEOUT = 0.005
 local RECEIVE_BUFFER_SIZE = 512
 
 
 local ControlStreamState = {
   Disconnected = 1,
-  Connected = 2,
-  Error = 3
+  Handshake = 2,
+  Ready = 3,
+  Error = 4
 }
 meca500.ControlStreamState = ControlStreamState
 
@@ -41,7 +42,7 @@ function ControlStream:connect(hostname, port)
     return false
   end
   self.client:settimeout(READ_TIMEOUT, 't')
-  self.state = ControlStreamState.Connected
+  self.state = ControlStreamState.Handshake
   resetStash(self, '')
   return true
 end
@@ -59,7 +60,7 @@ end
 
 function ControlStream:close(abortive)
   if self.client ~= nil then
-    if self.state == ControlStreamState.Connected then
+    if self.state == ControlStreamState.Ready then
       self.client:shutdown('send')
       if abortive then
         self.client:setoption('linger', { on = true, timeout = 0 })
@@ -95,6 +96,7 @@ end
 local function parseResponse(self, s)
   -- response format: [4-digit code][message string OR return values.]
   local code, msg = s:match('^%[(%d%d%d%d)%]%[(.*)%]$')
+  code = tonumber(code)
   if code == nil then
     self.logger.error('[ControlStream] Invalid response received: ' .. s)
     self.state = ControlStreamState.Error
@@ -103,11 +105,7 @@ local function parseResponse(self, s)
 end
 
 
-function ControlStream:read()
-  if self.state ~= ControlStreamState.Connected then
-    return nil
-  end
-
+local function readResponse(self)
   local s = nextResponseString(self)
   if s ~= nil then
     return parseResponse(self, s)
@@ -136,6 +134,79 @@ function ControlStream:read()
 end
 
 
+function ControlStream:read()
+  if self.state == ControlStreamState.Handshake then
+    local code, msg = readResponse(self)
+    if code ~= nil then
+      if code == 3000 then  -- inital connect message of meca
+        self.logger.info('Handshake from robot received.')
+        self.realtimeState:parseResponse(code, msg)
+        self:requestStatus()
+      elseif code == 2007 then -- robot status
+        self.realtimeState:parseResponse(code, msg)
+        self.state = ControlStreamState.Ready
+        self.logger.info('Initial robot status received.')
+        return true
+      else
+        self.state = ControlStreamState.Error
+      end
+    end
+    return false
+  end
+
+  while true do
+    local code, msg = readResponse(self)
+    if code == nil then
+      break
+    end
+
+    print(code, msg)
+    self.realtimeState:parseResponse(code, msg)
+  end
+
+  return true
+end
+
+
 function ControlStream:send(msg)
   return self.client:send(msg)
+end
+
+
+function ControlStream:requestStatus()
+  local req = 'GetStatusRobot\0'
+  if self.realtimeState.status.activated then
+    req = req .. 'GetGripperStatus\0'
+  end
+  return self:send(req)
+end
+
+
+function ControlStream:activateRobot()
+  return self:send('ActivateRobot\0')
+end
+
+
+function ControlStream:deactivateRobot()
+  return self:send('DeactivateRobot\0')
+end
+
+
+function ControlStream:activateJointsFeed()
+  return self:send('ActivateJointsFeed\0')
+end
+
+
+function ControlStream:deactivateJointsFeed()
+  return self:send('DeactivateJointsFeed\0')
+end
+
+
+function ControlStream:clearMotion()
+  return self:send('ClearMotion\0')
+end
+
+
+function ControlStream:home()
+  return self:send('Home\0')
 end

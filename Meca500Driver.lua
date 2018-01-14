@@ -34,6 +34,11 @@ function Meca500Driver:__init(cfg, logger, heartbeat)
   self.maxSinglePointTrajectoryDistance = cfg.maxSinglePointTrajectoryDistance or DEFAULT_MAX_SINGLE_POINT_TRAJECTORY_DISTANCE
   self.jointNamePrefix = cfg.jointNamePrefix
 
+  self.autoActivation = cfg.autoActivation
+  self.autoHoming = cfg.autoHoming
+  self.activateSent = false
+  self.homeSent = false
+
   self.realtimeState = RealtimeState()
   self.controlStream = ControlStream(self.realtimeState, self.logger)
   self.syncCallbacks = {}
@@ -155,10 +160,16 @@ end
 
 
 function Meca500Driver:sync()
+
+  -- request status once per sync
+  if self.controlStream:getState() == ControlStreamState.Ready then
+    self.controlStream:requestStatus()
+  end
+
   for i=1,MAX_SYNC_READ_TRIES do
 
-    if self.controlStream:getState() ~= ControlStreamState.Connected then
-      return false, '[Meca500Driver] Control stream not connected.'
+    if self.controlStream:getState() ~= ControlStreamState.Ready then
+      return false, '[Meca500Driver] Control stream not ready.'
     end
 
     if self.controlStream:read() then
@@ -321,6 +332,26 @@ local function driverCore(self)
   if not ok then
     error(err)
   end
+
+  if self.controlStream:getState() == ControlStreamState.Ready then
+    if not self.realtimeState.status.activated then
+      if self.autoActivation and not self.activateSent then
+        self.logger.info('Activating robot...')
+        self.controlStream:activateRobot()
+        self.activateSent = true
+      end
+    elseif not self.realtimeState.status.homingPerformed then
+      if self.autoHoming and not self.homeSent then
+        self.logger.info('Homing...')
+        self.controlStream:home()
+        self.homeSent = true
+      end
+    elseif not self.realtimeState.status.jointFeed then
+      self.logger.info('Activating joint feed...')
+      self.controlStream:activateJointsFeed()
+    end
+  end
+
   dispatchTrajectory(self)
 end
 
@@ -335,14 +366,16 @@ function Meca500Driver:spin()
   end
 
   if self.controlStream:getState() == ControlStreamState.Disconnected then
+    self.activateSent = false
+    self.homeSent = false
     self.logger.info('ControlStream not connected, trying to connect...')
     if self.controlStream:connect(self.hostname, self.controlPort) then
-      self.logger.info('Connected.')
+      self.logger.info('Control stream connection established.')
     end
   end
 
   local ok, err = true, nil
-  if self.controlStream:getState() == ControlStreamState.Connected then
+  if self.controlStream:getState() == ControlStreamState.Ready then
 
     -- sync
     ok, err = pcall(function() driverCore(self) end)
@@ -350,6 +383,8 @@ function Meca500Driver:spin()
       self.logger.error("[Meca500Driver] Spin error: " .. err)
     end
 
+  elseif self.controlStream:getState() == ControlStreamState.Handshake then
+    self.controlStream:read()
   end
 
   if not ok or self.controlStream:getState() == ControlStreamState.Error then
@@ -376,5 +411,23 @@ end
 
 
 function Meca500Driver:shutdown()
+  self.logger.info('Shutting down driver...')
+  
+  self.logger.info('clearMotion')
+  self.controlStream:clearMotion()
+  sys.sleep(0.5)
+  self.controlStream:read()
+
+  self.logger.info('deactivateJointsFeed')
+  self.controlStream:deactivateJointsFeed()
+  sys.sleep(0.5)
+  self.controlStream:read()
+
+  self.logger.info('deactivateRobot')
+  self.controlStream:deactivateRobot()
+  sys.sleep(0.5)
+  self.controlStream:read()
+
+  self.logger.info('Closing control stream.')
   self.controlStream:close()
 end

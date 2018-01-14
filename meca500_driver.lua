@@ -317,13 +317,15 @@ local function main()
   -- parse command line arguments
   local cmd = torch.CmdLine()
   cmd:text()
-  cmd:text('Xamla Meca500 ROS driver')
+  cmd:text('Xamla ROS driver for the Mecademic Meca500 robot arm')
   cmd:text()
   cmd:option('-hostname',              '192.168.0.100',   'hostname of robot to connect to')
   cmd:option('-control-port',                    10000,   'control port')
   cmd:option('-path-tolerance',           math.pi / 10,   'max set point distance to current joint configuration')
   cmd:option('-controller-name',             'meca500',   'Emulation of ROS position controller')
   cmd:option('-joint-name-prefix',                  '',   'Name prefix of published joints')
+  cmd:option('-auto-activation',                  true,   'Flag: Activate robot if it is turned off')
+  cmd:option('-auto-homing',                      true,   'Flag: Perform homing automatically')
   local opt = cmd:parse(arg or {})
 
   -- ros initialization
@@ -352,7 +354,9 @@ local function main()
     controlPort             = opt['control-port'],
     pathTolerance           = opt['path-tolerance'],      
     maxSinglePointTrajectoryDistance = opt['max-single-point-trajectory-distance'],
-    jointNamePrefix         = opt['joint-name-prefix']
+    jointNamePrefix         = opt['joint-name-prefix'],
+    autoActivation          = opt['auto-activation'],
+    autoHoming              = opt['auto-homing']
   }
 
   local overrideInputArguments = function (key, value, ok)
@@ -366,6 +370,8 @@ local function main()
   overrideInputArguments('pathTolerance', nh:getParamDouble('path_tolerance'))
   overrideInputArguments('maxSinglePointTrajectoryDistance', nh:getParamDouble('max_single_point_trajectory_distance'))
   overrideInputArguments('jointNamePrefix', nh:getParamString('joint_name_prefix'))
+  overrideInputArguments('autoActivation', nh:getParamBool('auto_activation'))
+  overrideInputArguments('autoHoming', nh:getParamBool('auto_homing'))
 
   -- print effective options
   print('Effective driver configuration:')
