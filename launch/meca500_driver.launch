@@ -1,0 +1,5 @@
+<?xml version="1.0"?>
+<launch>
+  <node name="meca500_driver" pkg="meca500_driver" type="meca500_driver.lua" cwd="node" output="screen">
+  </node>
+</launch>
