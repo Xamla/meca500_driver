@@ -1,4 +1,5 @@
 local socket = require 'socket'
+local sys = require 'sys'
 local meca500 = require 'meca500_env'
 
 local ControlStream = torch.class('ControlStream')
@@ -39,6 +40,7 @@ function ControlStream:connect(hostname, port)
   local ok, err = self.client:connect(hostname or DEFAULT_HOSTNAME, port or DEFAULT_CONTROL_PORT)
   if not ok then
     self.logger.error('Connecting failed, error: ' .. err)
+    sys.sleep(0.1)
     return false
   end
   self.client:settimeout(READ_TIMEOUT, 't')
@@ -160,7 +162,7 @@ function ControlStream:read()
       break
     end
 
-    print(code, msg)
+    -- print(code, msg)
     self.realtimeState:parseResponse(code, msg)
   end
 

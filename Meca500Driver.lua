@@ -2,6 +2,7 @@ local torch = require 'torch'
 local sys = require 'sys'
 require 'ControlStream'
 require 'RealtimeState'
+require 'TrajectoryHandler'
 local meca500 = require 'meca500_env'
 
 
@@ -43,6 +44,7 @@ function Meca500Driver:__init(cfg, logger, heartbeat)
   self.controlStream = ControlStream(self.realtimeState, self.logger)
   self.syncCallbacks = {}
   self.trajectoryQueue = {}      -- list of pending trajectories
+  self.servoTime = 1/100
 end
 
 
@@ -124,7 +126,6 @@ function Meca500Driver:blendTrajectory(traj)
     local handler_ = self:createTrajectoryHandler(traj_, traj_.flush, traj_.waitConvergence, traj_.maxBuffering)
 
     self.currentTrajectory = {
-      startTime = sys.clock(),     -- debug information
       traj = traj_,
       handler = handler_
     }
@@ -185,6 +186,25 @@ function Meca500Driver:sync()
   end
 
   return false, '[Meca500Driver] Sync timeout.'
+end
+
+
+function Meca500Driver:createTrajectoryHandler(traj, flush, waitCovergence)
+  -- TODO: check use of flush & waitConvergence
+
+  --[[if flush == nil then
+    flush = true
+  end
+  if waitCovergence == nil then
+    waitCovergence = true
+  end]]
+  return TrajectoryHandler(
+    traj,
+    self.controlStream,
+    self.realtimeState,
+    self.servoTime,
+    self.logger
+  )
 end
 
 
@@ -276,7 +296,6 @@ local function dispatchTrajectory(self)
           end
 
           self.currentTrajectory = {
-            startTime = sys.clock(),     -- debug information
             traj = traj,
             handler = self:createTrajectoryHandler(traj, flush, waitCovergence, maxBuffering)
           }

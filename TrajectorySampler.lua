@@ -77,8 +77,32 @@ function TrajectorySampler:getGoalPosition()
 end
 
 
+function TrajectorySampler:generatePointsUntil(endTimeFromStart)
+  local qs,qds = {}, {}
+  while self.t < endTimeFromStart do
+    local q,qd = self:evaluateAt(self.t)
+
+    local delta = torch.norm(q - self.qlast)
+    if delta > JUMP_ERROR_THRESHOLD then
+      error(string.format('[TrajectorySampler] Error: Unexpected set point jump of %f rad at time %fs.', delta, self.t))
+    end
+
+    qs[#qs+1] = q
+    qds[#qds+1] = qd
+    self.qlast = q
+
+    if self:atEnd() then
+      break
+    end
+
+    self.t = self.t + self.step
+  end
+  return qs,qds
+end
+
+
 function TrajectorySampler:generateNextPoints(maxCount)
-  local pts = {}
+  local qs,qds = {}, {}
   for i=1,maxCount do
     local q,qd = self:evaluateAt(self.t)
 
@@ -86,9 +110,12 @@ function TrajectorySampler:generateNextPoints(maxCount)
     if delta > JUMP_ERROR_THRESHOLD then
       error(string.format('[TrajectorySampler] Error: Unexpected set point jump of %f rad at time %fs.', delta, self.t))
     end
-    self.t = self.t + self.step
-    pts[#pts+1] = q
+
+    qs[#qs+1] = q
+    qds[#qds+1] = qd
     self.qlast = q
+
+    self.t = self.t + self.step
   end
-  return pts
+  return qs,qds
 end

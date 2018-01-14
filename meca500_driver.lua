@@ -44,7 +44,7 @@ local function publishJointStates(driver)
   local state = driver:getRealtimeState()
   jointMsg.header.stamp = ros.Time.now()
   jointMsg.position = state.q_actual
-  --jointMsg.velocity = state.qd_actual
+  jointMsg.velocity = state.qd_actual
   --jointMsg.effort = state.i_actual
   jointStatePublisher:publish(jointMsg)
 end

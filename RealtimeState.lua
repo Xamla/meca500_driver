@@ -1,4 +1,5 @@
 local torch = require 'torch'
+local ros = require 'ros'
 local meca500 = require 'meca500_env'
 
 
@@ -53,11 +54,25 @@ end
 
 
 local function parseJointAngles(self, code, message)
+  local now = ros.Time.now()
   local q = parseCommaSeparatedNumbers(message)
   if #q < 6 then
     error('Invalid joint angles received')
   end
+  
+  local q_last = self.q_actual
   self.q_actual = torch.DoubleTensor(q)
+  if self.q_actual_time ~= nil then
+    local dt = (now - self.q_actual_time):toSec()
+    if dt > 0.001 then
+      self.qd_actual = (self.q_actual - q_last) / dt
+      --print('qd', self.qd_actual)
+      self.valid = true
+    end
+  else
+    self.qd_actual:zero()
+  end
+  self.q_actual_time = now
 end
 
 
@@ -65,6 +80,7 @@ function RealtimeState:__init()
   self.robotStatus = torch.IntTensor(7):zero()            -- numeric robot status vector
   self.gripperStatus = torch.IntTensor(6):zero()          -- numeric gripper status vector
   self.q_actual = torch.DoubleTensor(6):zero()            -- Actual joint positions (in rad)
+  self.qd_actual = torch.DoubleTensor(6):zero()
 
   -- decoded fields of robot status vector
   self.status = {
