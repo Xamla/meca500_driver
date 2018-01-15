@@ -38,6 +38,7 @@ function TrajectoryHandler:__init(traj, controlStream, realtimeState, dt, logger
   self.convergenceCycle = 0
   self.startTime = ros.Time.now()
   self.flush = true
+  self.waitCovergence = true
 end
   
 
@@ -52,6 +53,7 @@ end
 local function reachedGoal(self)
   local q_goal = self.sampler:getGoalPosition()
   local q_actual = self.realtimeState.q_actual
+  local qd_actual = self.realtimeState.qd_actual
 
   local goal_distance = torch.norm(q_goal - q_actual)
 
@@ -77,21 +79,22 @@ function TrajectoryHandler:update()
   end
 
   local now = ros.Time.now()
+  local elapsed = now - self.startTime
 
-  if not self.samper:atEnd() then
+  if not self.sampler:atEnd() then
     self.status = TrajectoryHandlerStatus.Streaming
     -- compute time of maximum lookahead trajectory point to send to robot
-    local queueEndTime = ((now + LOOK_AHEAD_SECONDS) - self.startTime):toSec()
+    local queueEndTime = (elapsed + LOOK_AHEAD_SECONDS):toSec()
     local pos,vel = self.sampler:generatePointsUntil(queueEndTime)
-    -- send points to robot
 
+    -- send points to robot
     for i,v in ipairs(pos) do
-      print('would send', v)
-      --self:controlStream:moveJoints(v)
+      self.controlStream:setJointVel(torch.abs(vel[i]):max())
+      self.controlStream:moveJoints(v)
     end
 
   else
-    if (reachedGoal(self) or not self.waitCovergence) then      -- when buffer is empty we are done
+    if elapsed:toSec() >= self.sampler:getEndTime() and (reachedGoal(self) or not self.waitCovergence) then      -- when buffer is empty we are done
       self.status = TrajectoryHandlerStatus.Completed
       return false
     else

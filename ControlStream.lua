@@ -2,12 +2,16 @@ local socket = require 'socket'
 local sys = require 'sys'
 local meca500 = require 'meca500_env'
 
+
 local ControlStream = torch.class('ControlStream')
+
 
 local DEFAULT_HOSTNAME = '192.168.0.100'
 local DEFAULT_CONTROL_PORT = 10000
 local READ_TIMEOUT = 0.005
 local RECEIVE_BUFFER_SIZE = 512
+local MAX_VELOCITY_DEG = 135
+local MIN_VOLOCITY_DEG = 1
 
 
 local ControlStreamState = {
@@ -193,6 +197,10 @@ function ControlStream:deactivateRobot()
   return self:send('DeactivateRobot\0')
 end
 
+function ControlStream:resetError()
+  return self:send('ResetError\0')
+end
+
 
 function ControlStream:activateJointsFeed()
   return self:send('ActivateJointsFeed\0')
@@ -211,4 +219,42 @@ end
 
 function ControlStream:home()
   return self:send('Home\0')
+end
+
+
+function ControlStream:moveJoints(q)
+  local cmd = string.format("MoveJoints(%f,%f,%f,%f,%f,%f)\0",
+    math.deg(q[1]), math.deg(q[2]), 
+    math.deg(q[3]), math.deg(q[4]), 
+    math.deg(q[5]), math.deg(q[6])
+  )
+  return self:send(cmd)
+end
+
+
+function ControlStream:setJointVel(v)
+  v = math.max(math.min(math.deg(v or 0.8), MAX_VELOCITY_DEG), MIN_VOLOCITY_DEG)
+  local cmd = string.format('SetJointVel(%f)\0', v)
+  return self:send(cmd)
+end
+
+
+function ControlStream:gripper(e)
+  if type(e) == 'boolean' then
+    e = e and 1 or 0
+  end
+  local cmd = string.format('Gripper(%d)\0', e)
+  return self:send(cmd)
+end
+
+
+function ControlStream:setGripperVel(v)
+  local cmd = string.format('SetGripperVel(%f)\0', v)
+  return self:send(cmd)
+end
+
+
+function ControlStream:setGripperForce(f)
+  local cmd = string.format('SetGripperForce(%f)\0', f)
+  return self:send(cmd)
 end

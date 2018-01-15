@@ -59,8 +59,13 @@ function TrajectorySampler:atEnd()
 end
 
 
-function TrajectorySampler:getCurrentTime(t)
+function TrajectorySampler:getCurrentTime()
   return self.t
+end
+
+
+function TrajectorySampler:getEndTime()
+  return self.tend
 end
 
 

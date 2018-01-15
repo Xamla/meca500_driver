@@ -61,7 +61,7 @@ local function parseJointAngles(self, code, message)
   end
   
   local q_last = self.q_actual
-  self.q_actual = torch.DoubleTensor(q)
+  self.q_actual = torch.DoubleTensor(q) * math.pi / 180
   if self.q_actual_time ~= nil then
     local dt = (now - self.q_actual_time):toSec()
     if dt > 0.001 then

@@ -7,6 +7,7 @@ local meca500 = require 'meca500_env'
 
 
 local ControlStreamState = meca500.ControlStreamState
+local TrajectoryHandlerStatus = meca500.TrajectoryHandlerStatus
 
 
 -- constants
@@ -420,8 +421,8 @@ function Meca500Driver:spin()
     -- realtime stream is in error state, recreate stream object
 
     self.logger.warn('Closing robot communication socket and reconnecting. (RT state: %d)', self.controlStream:getState())
-
-    self.controlStream:close()
+    self:shutdown()
+    
     self.realtimeState:invalidate()
     self.controlStream = ControlStream(self.realtimeState, self.logger)
   end
