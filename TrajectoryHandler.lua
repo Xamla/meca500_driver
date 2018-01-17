@@ -39,6 +39,7 @@ function TrajectoryHandler:__init(traj, controlStream, realtimeState, dt, logger
   self.startTime = ros.Time.now()
   self.flush = true
   self.waitCovergence = true
+  self.singleWaypoint = traj.singleWaypoint or (traj.time:size(1) == 1)
 end
   
 
@@ -57,7 +58,7 @@ local function reachedGoal(self)
 
   local goal_distance = torch.norm(q_goal - q_actual)
 
-  self.logger.info('Convergence cycle %d: |qd_actual|: %f; goal_distance (joints): %f;', self.convergenceCycle, qd_actual:norm(), goal_distance)
+  self.logger.debug('Convergence cycle %d: |qd_actual|: %f; goal_distance (joints): %f;', self.convergenceCycle, qd_actual:norm(), goal_distance)
 
   self.convergenceCycle = self.convergenceCycle + 1
   if self.convergenceCycle >= MAX_CONVERGENCE_CYCLES then
@@ -86,10 +87,23 @@ function TrajectoryHandler:update()
     -- compute time of maximum lookahead trajectory point to send to robot
     local queueEndTime = (elapsed + LOOK_AHEAD_SECONDS):toSec()
     local pos,vel = self.sampler:generatePointsUntil(queueEndTime)
+    local q_actual = self.realtimeState.q_actual
 
     -- send points to robot
     for i,v in ipairs(pos) do
-      self.controlStream:setJointVel(torch.abs(vel[i]):max())
+      if self.singleWaypoint then
+        self.controlStream:setJointVel(math.pi)   -- use maximum velocity for single waypoints
+
+        -- compute the minimum time when target will be reached (assume max cruising speed)
+        local delta = v - q_actual
+        local minTime = torch.cdiv(delta, meca500.JOINT_VELOCITY_LIMITS[{{},2}]):abs():max()
+        if delta:norm() > 1e-5 and minTime > 2 * self.dt then
+          -- truncate goal
+          v = q_actual + delta * (2 * self.dt / minTime)
+        end
+      else
+        self.controlStream:setJointVel(torch.abs(vel[i]):max() * 1.025)
+      end
       self.controlStream:moveJoints(v)
     end
 

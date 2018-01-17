@@ -92,7 +92,7 @@ function Meca500Driver:blendTrajectory(traj)
   else
 
     local traj_
-    if traj.time:size(1) == 1 and traj.time[1] == 0 then
+    if traj.time:size(1) == 1 and traj.time[1] <= self.servoTime then
       traj_ = traj    -- special case for single point trajectory with 0 time_from_start (no blending)
     else
       -- get position of last command sent to robot
@@ -120,7 +120,8 @@ function Meca500Driver:blendTrajectory(traj)
         completed = traj.completed,
         flush = traj.flush,
         waitConvergence = traj.waitConvergence,
-        maxBuffering = traj.maxBuffering
+        maxBuffering = traj.maxBuffering,
+        singleWaypoint = (traj.time:size(1) == 1)   -- mark this trajectory as blended single point
       }
     end
 
