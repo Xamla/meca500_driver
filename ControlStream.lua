@@ -1,7 +1,7 @@
 local socket = require 'socket'
 local sys = require 'sys'
 local meca500 = require 'meca500_env'
-
+local ResponseCode = meca500.ResponseCode
 
 local ControlStream = torch.class('ControlStream')
 
@@ -146,11 +146,11 @@ function ControlStream:read()
   if self.state == ControlStreamState.Handshake then
     local code, msg = readResponse(self)
     if code ~= nil then
-      if code == 3000 then  -- inital connect message of meca
+      if code == ResponseCode.Connected then  -- inital connect message of meca
         self.logger.info('Handshake from robot received.')
         self.realtimeState:parseResponse(code, msg)
         self:requestStatus()
-      elseif code == 2007 then -- robot status
+      elseif code == ResponseCode.RobotStatus then -- robot status
         self.realtimeState:parseResponse(code, msg)
         self.state = ControlStreamState.Ready
         self.logger.info('Initial robot status received.')
@@ -167,6 +167,8 @@ function ControlStream:read()
     if code == nil then
       break
     end
+
+
 
     -- print(code, msg)
     self.realtimeState:parseResponse(code, msg)
@@ -220,6 +222,16 @@ end
 
 
 function ControlStream:home()
+
+  local handler = {
+    parseResponse = function (code, msg)
+      if code == 2002 then
+        --[2002][Homing done.]
+        --[2003][Homing already done.]
+      end
+    end
+  }
+
   return self:send('Home\0')
 end
 

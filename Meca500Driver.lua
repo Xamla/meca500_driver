@@ -4,6 +4,7 @@ require 'ControlStream'
 require 'RealtimeState'
 require 'TrajectoryHandler'
 local meca500 = require 'meca500_env'
+local ResponseCode = meca500.ResponseCode
 
 
 local ControlStreamState = meca500.ControlStreamState
@@ -15,8 +16,6 @@ local MAX_SYNC_READ_TRIES = 250
 local DEFAULT_MAX_SINGLE_POINT_TRAJECTORY_DISTANCE = 0.5      -- max allowed distance of single point trajectory target relative to current joint pos
 local DEFAULT_HOSTNAME = '192.168.0.100'
 local DEFAULT_CONTROL_PORT = 10000
-
-
 local JOINT_NAMES = meca500.JOINT_NAMES
 local JOINT_POSITION_LIMITS = meca500.JOINT_POSITION_LIMITS
 local JOINT_VELOCITY_LIMITS = meca500.JOINT_VELOCITY_LIMITS
@@ -38,8 +37,11 @@ function Meca500Driver:__init(cfg, logger, heartbeat)
 
   self.autoActivation = cfg.autoActivation
   self.autoHoming = cfg.autoHoming
+  self.autoResetError = cfg.autoResetError
+
   self.activateSent = false
   self.homeSent = false
+  self.resetErrorSent = false
 
   self.realtimeState = RealtimeState()
   self.controlStream = ControlStream(self.realtimeState, self.logger)
@@ -355,21 +357,32 @@ local function driverCore(self)
   end
 
   if self.controlStream:getState() == ControlStreamState.Ready then
-    if not self.realtimeState.status.activated then
-      if self.autoActivation and not self.activateSent then
-        self.logger.info('Activating robot...')
-        self.controlStream:activateRobot()
-        self.activateSent = true
+    if self.realtimeState.status.error then
+      -- robot is in error state
+      if self.autoResetError and not self.resetErrorSent then
+        self.logger.warn('Resetting error...')
+        self.controlStream:resetError()
+        self.resetErrorSent = true
       end
-    elseif not self.realtimeState.status.homingPerformed then
-      if self.autoHoming and not self.homeSent then
-        self.logger.info('Homing...')
-        self.controlStream:home()
-        self.homeSent = true
+    else
+      -- robot is not in error state
+      self.resetErrorSent = false
+      if not self.realtimeState.status.activated then
+        if self.autoActivation and not self.activateSent then
+          self.logger.info('Activating robot...')
+          self.controlStream:activateRobot()
+          self.activateSent = true
+        end
+      elseif not self.realtimeState.status.homingPerformed then
+        if self.autoHoming and not self.homeSent then
+          self.logger.info('Homing...')
+          self.controlStream:home()
+          self.homeSent = true
+        end
+      elseif not self.realtimeState.status.jointFeed then
+        self.logger.info('Activating joint feed...')
+        self.controlStream:activateJointsFeed()
       end
-    elseif not self.realtimeState.status.jointFeed then
-      self.logger.info('Activating joint feed...')
-      self.controlStream:activateJointsFeed()
     end
   end
 

@@ -1,6 +1,7 @@
 local torch = require 'torch'
 local ros = require 'ros'
 local meca500 = require 'meca500_env'
+local ResponseCode = meca500.ResponseCode
 
 
 local RealtimeState = torch.class('RealtimeState')
@@ -17,7 +18,7 @@ end
 
 local function parseMecaVersion(self, code, message)
   local version_tag = message:match('^Connected to Meca500 (.*)$')
-  assert(version_tag ~= nil, 'Meca Version tag invalid')
+  assert(version_tag ~= nil, 'Meca version tag invalid')
   self.versionTag = version_tag
 end
 
@@ -95,11 +96,11 @@ function RealtimeState:__init()
   self:invalidate()
 
   self.handlerTable = {}
-  self.handlerTable[3000] = parseMecaVersion
-  self.handlerTable[2007] = parseRobotStatus
-  self.handlerTable[2079] = parseGripperStatus
-  self.handlerTable[2026] = parseJointAngles
-  self.handlerTable[3007] = parseJointAngles
+  self.handlerTable[ResponseCode.Connected] = parseMecaVersion
+  self.handlerTable[ResponseCode.RobotStatus] = parseRobotStatus
+  self.handlerTable[ResponseCode.GripperStatus] = parseGripperStatus
+  self.handlerTable[ResponseCode.JointValues] = parseJointAngles
+  self.handlerTable[ResponseCode.JointFeed] = parseJointAngles
 end
 
 

@@ -356,7 +356,8 @@ local function main()
     maxSinglePointTrajectoryDistance = opt['max-single-point-trajectory-distance'],
     jointNamePrefix         = opt['joint-name-prefix'],
     autoActivation          = opt['auto-activation'],
-    autoHoming              = opt['auto-homing']
+    autoHoming              = opt['auto-homing'],
+    autoResetError          = opt['auto-reset-error']
   }
 
   local overrideInputArguments = function (key, value, ok)
@@ -372,6 +373,7 @@ local function main()
   overrideInputArguments('jointNamePrefix', nh:getParamString('joint_name_prefix'))
   overrideInputArguments('autoActivation', nh:getParamBool('auto_activation'))
   overrideInputArguments('autoHoming', nh:getParamBool('auto_homing'))
+  overrideInputArguments('autoResetError', nh:getParamBool('auto_reset_error'))
 
   -- print effective options
   print('Effective driver configuration:')
