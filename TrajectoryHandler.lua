@@ -8,6 +8,8 @@ local GOAL_CONVERGENCE_POSITION_THRESHOLD = 0.00051   -- in rad
 local GOAL_CONVERGENCE_VELOCITY_THRESHOLD = 0.001    -- in rad/s
 local MAX_CONVERGENCE_CYCLES = 50
 local LOOK_AHEAD_SECONDS = 0.5
+local MAX_VELOCITY_RAD = meca500.MAX_VELOCITY_RAD
+local MIN_VOLOCITY_RAD = meca500.MIN_VOLOCITY_RAD
 
 
 local TrajectoryHandlerStatus = {
@@ -86,25 +88,40 @@ function TrajectoryHandler:update()
     self.status = TrajectoryHandlerStatus.Streaming
     -- compute time of maximum lookahead trajectory point to send to robot
     local queueEndTime = (elapsed + LOOK_AHEAD_SECONDS):toSec()
+    local q_last = self.sampler:evaluateAt(self.sampler:getCurrentTime())
     local pos,vel = self.sampler:generatePointsUntil(queueEndTime)
     local q_actual = self.realtimeState.q_actual
+    local velocity = MAX_VELOCITY_RAD   -- scalar value used for all joints (2x for j4-j6)
 
     -- send points to robot
-    for i,v in ipairs(pos) do
-      if self.singleWaypoint then
-        self.controlStream:setJointVel(math.pi)   -- use maximum velocity for single waypoints
+    for i,q_desired in ipairs(pos) do
 
+      if self.singleWaypoint then
+        local delta = q_desired - q_actual
         -- compute the minimum time when target will be reached (assume max cruising speed)
-        local delta = v - q_actual
         local minTime = torch.cdiv(delta, meca500.JOINT_VELOCITY_LIMITS[{{},2}]):abs():max()
         if delta:norm() > 1e-5 and minTime > 2 * self.dt then
           -- truncate goal
-          v = q_actual + delta * (2 * self.dt / minTime)
+          q_desired = q_actual + delta * (2 * self.dt / minTime)
         end
+        velocity = MAX_VELOCITY_RAD   -- use maximum velocity for single waypoints
       else
-        self.controlStream:setJointVel(torch.abs(vel[i]):max() * 1.025)
+        -- estimate required time to reach next setpoint
+        local delta = q_desired - q_last
+        local qd_desired = torch.abs(vel[i])        -- work with absolute velocity
+        local qd_safe = qd_desired:clone()
+        qd_safe[qd_desired:lt(1e-3)] = 1e-3  -- establish a lower bound to prevent inf/NaN
+        local minTime = torch.cdiv(delta, qd_safe):abs():max()
+        if minTime > self.dt then
+          -- computed waypoint velocity value is too low
+          qd_safe:mul(minTime/self.dt):clamp(MIN_VOLOCITY_RAD, MAX_VELOCITY_RAD)
+        end
+        velocity = qd_safe:max()
       end
-      self.controlStream:moveJoints(v)
+
+      self.controlStream:setJointVel(velocity)
+      self.controlStream:moveJoints(q_desired)
+      q_last = q_desired
     end
 
   else

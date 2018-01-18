@@ -10,8 +10,10 @@ local DEFAULT_HOSTNAME = '192.168.0.100'
 local DEFAULT_CONTROL_PORT = 10000
 local READ_TIMEOUT = 0.005
 local RECEIVE_BUFFER_SIZE = 512
-local MAX_VELOCITY_DEG = 135
-local MIN_VOLOCITY_DEG = 1
+local MAX_VELOCITY_DEG = meca500.MAX_VELOCITY_DEG
+local MIN_VOLOCITY_DEG = meca500.MIN_VOLOCITY_DEG
+local JOINT_POSITION_LIMITS_MIN = meca500.JOINT_POSITION_LIMITS[{{},1}]:clone()
+local JOINT_POSITION_LIMITS_MAX = meca500.JOINT_POSITION_LIMITS[{{},2}]:clone()
 
 
 local ControlStreamState = {
@@ -223,16 +225,26 @@ end
 
 
 function ControlStream:moveJoints(q)
+  assert(
+    q ~= nil and q:nElement() == 6 and q:size(1) == 6,
+    'Invalid argument: Joint setpoint is nil or in invalid shape (6D tensor expected).'
+  )
   local cmd = string.format("MoveJoints(%f,%f,%f,%f,%f,%f)\0",
     math.deg(q[1]), math.deg(q[2]), 
     math.deg(q[3]), math.deg(q[4]), 
     math.deg(q[5]), math.deg(q[6])
+  )
+  assert(
+    q:ge(JOINT_POSITION_LIMITS_MIN):all() and q:le(JOINT_POSITION_LIMITS_MAX):all(),
+    'Joint setpoint lies outside joint position limits: ' .. cmd
   )
   return self:send(cmd)
 end
 
 
 function ControlStream:setJointVel(v)
+  assert(v ~= nil and type(v) == 'number', 'Invalid argument: Velocity value is nil or no number.')
+  assert(meca500.isFiniteNumber(v), 'Velocity is not a finite numbers.')
   v = math.max(math.min(math.deg(v or 0.8), MAX_VELOCITY_DEG), MIN_VOLOCITY_DEG)
   local cmd = string.format('SetJointVel(%f)\0', v)
   return self:send(cmd)

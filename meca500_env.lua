@@ -46,6 +46,42 @@ meca500.JOINT_VELOCITY_LIMITS = torch.DoubleTensor(
 )
 
 
+meca500.MIN_VOLOCITY_DEG = 1
+meca500.MIN_VOLOCITY_RAD = math.rad(meca500.MIN_VOLOCITY_DEG)
+
+
+meca500.MAX_VELOCITY_DEG = 135
+meca500.MAX_VELOCITY_RAD = math.rad(meca500.MAX_VELOCITY_DEG)
+
+
+
+local function isFiniteTensor(x)
+  -- check for NaN, +/-inf elements
+  return x:eq(x):all() and not x:eq(1/0):any() and not x:eq(-1/0):any()
+end
+
+
+local function isFiniteNumber(x)
+  -- check for NaN, +/-inf values
+  return x == x and x ~= 1/0 and x ~= -1/0
+end
+
+
+local function isFinite(x)
+  if torch.isTensor(x) then
+    return isFiniteTensor(x)
+  elseif type(x) == 'number' then
+    return isFiniteNumber(x)
+  end
+  return false
+end
+
+
+meca500.isFiniteTensor = isFiniteTensor
+meca500.isFiniteNumber = isFiniteNumber
+meca500.isFinite = isFinite
+
+
 meca500.DEFAULT_LOGGER = {
   debug = function(...)
     print('[DEBUG] ' .. string.format(...))
