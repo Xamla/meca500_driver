@@ -8,7 +8,7 @@ local ControlStream = torch.class('ControlStream')
 
 local DEFAULT_HOSTNAME = '192.168.0.100'
 local DEFAULT_CONTROL_PORT = 10000
-local READ_TIMEOUT = 0.005
+local READ_TIMEOUT = 0
 local RECEIVE_BUFFER_SIZE = 512
 local MAX_VELOCITY_DEG = meca500.MAX_VELOCITY_DEG
 local MIN_VOLOCITY_DEG = meca500.MIN_VOLOCITY_DEG
@@ -167,8 +167,6 @@ function ControlStream:read()
     if code == nil then
       break
     end
-
-
 
     -- print(code, msg)
     self.realtimeState:parseResponse(code, msg)

@@ -9,6 +9,7 @@ local meca500 = require 'meca500_env'
 
 local nh                        -- ros node handle
 local jointStatePublisher       -- joint state publisher
+local lastJointStateStamp
 local jointMsg                  -- joint state message
 local jointNames = {}
 local followTrajectoryServer    -- action server
@@ -42,11 +43,15 @@ end
 
 local function publishJointStates(driver)
   local state = driver:getRealtimeState()
-  jointMsg.header.stamp = ros.Time.now()
-  jointMsg.position = state.q_actual
-  jointMsg.velocity = state.qd_actual
-  --jointMsg.effort = state.i_actual
-  jointStatePublisher:publish(jointMsg)
+  if state.q_actual_time ~= nil and (lastJointStateStamp == nil or lastJointStateStamp < state.q_actual_time) then
+    lastJointStateStamp = state.q_actual_time
+
+    jointMsg.header.stamp = state.q_actual_time
+    jointMsg.position = state.q_actual
+    jointMsg.velocity = state.qd_actual
+    --jointMsg.effort = state.i_actual
+    jointStatePublisher:publish(jointMsg)
+  end
 end
 
 
@@ -401,6 +406,7 @@ local function main()
   followTrajectoryServer:start()
 
   -- main driver loop
+  local rate = ros.Rate(200)
   while ros.ok() do
     driver:spin()
     if heartbeat ~= nil then
@@ -408,6 +414,7 @@ local function main()
     end
     ros.spinOnce()
     collectgarbage()
+    rate:sleep()
   end
 
   -- tear down components
