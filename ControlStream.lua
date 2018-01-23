@@ -8,6 +8,8 @@ local ControlStream = torch.class('ControlStream')
 
 local DEFAULT_HOSTNAME = '192.168.0.100'
 local DEFAULT_CONTROL_PORT = 10000
+local CONNECT_TIMEOUT = 1.0
+local RECONNECT_WAIT = 0.1
 local READ_TIMEOUT = 0
 local RECEIVE_BUFFER_SIZE = 512
 local MAX_VELOCITY_DEG = meca500.MAX_VELOCITY_DEG
@@ -43,10 +45,13 @@ end
 
 
 function ControlStream:connect(hostname, port)
+  self.client:settimeout(CONNECT_TIMEOUT)
   local ok, err = self.client:connect(hostname or DEFAULT_HOSTNAME, port or DEFAULT_CONTROL_PORT)
   if not ok then
     self.logger.error('Connecting failed, error: ' .. err)
-    sys.sleep(0.1)
+    self.client:close()
+    sys.sleep(RECONNECT_WAIT)
+    self.client = socket.tcp()
     return false
   end
   self.client:settimeout(READ_TIMEOUT, 't')
