@@ -14,7 +14,6 @@ local jointMsg                  -- joint state message
 local jointNames = {}
 local followTrajectoryServer    -- action server
 local trajectoryQueue = {}      -- list of pending trajectories
-local currentTrajectory
 local driver
 local posTrajControllerCommandSub   -- open loop position based trajectory controller listener
 local currentPosTraj                -- active trajectory of pos traj controller
@@ -156,7 +155,7 @@ local function FollowJointTrajectory_Goal(goalHandle)
   local traj = {
     time = time, pos = pos, vel = vel, acc = acc,
     goalHandle = goalHandle, goal = g,
-    accept = function()
+    accept = function(self)
       if goalHandle:getGoalStatus().status == GoalStatus.PENDING then
         goalHandle:setAccepted('Starting trajectory execution')
         return true
@@ -165,7 +164,7 @@ local function FollowJointTrajectory_Goal(goalHandle)
         return false
       end
     end,
-    proceed = function()
+    proceed = function(self)
       if goalHandle:getGoalStatus().status == GoalStatus.ACTIVE then
         return true
       else
@@ -176,7 +175,7 @@ local function FollowJointTrajectory_Goal(goalHandle)
     abort = function(self, msg)
       goalHandle:setAborted(nil, msg or 'Error')
     end,
-    completed = function()
+    completed = function(self)
       local r = goalHandle:createResult()
       r.error_code = TrajectoryResultStatus.SUCCESSFUL
       goalHandle:setSucceeded(r, 'Completed')
@@ -207,17 +206,21 @@ end
 local function FollowJointTrajectory_Cancel(goalHandle)
   ros.INFO('FollowJointTrajectory_Cancel')
 
-  -- check if trajectory is in trajectoryQueue
-  local i = findIndex(driver.trajectoryQueue, function(x) return x.goalHandle == goalHandle end)
-  if i > 0 then
-    -- entry found, simply remove from queue
-    table.remove(driver.trajectoryQueue, i)
-    goalHandle:setCanceled(nil, 'Canceled')
-
-  elseif driver.currentTrajectory ~= nil and driver.currentTrajectory.goalHandle == goalHandle then
+  if driver.currentTrajectory ~= nil and driver.currentTrajectory.traj.goalHandle == goalHandle then
     driver:cancelCurrentTrajectory('Canceled')
+  else
+    -- check if trajectory is in trajectoryQueue
+    local i = findIndex(driver.trajectoryQueue, function(x) return x.goalHandle == goalHandle end)
+    if i > 0 then
+      -- entry found, simply remove from queue
+      table.remove(driver.trajectoryQueue, i)
+    else
+      ros.WARN('Trajectory to cancel with goal handle \'%s\' not found.', goalHandle:getGoalID().id)
+    end
+    goalHandle:setCanceled(nil, 'Canceled')
   end
 end
+
 
 
 local function posTrajController_Command(msg, header, subscriber)
@@ -241,7 +244,7 @@ local function posTrajController_Command(msg, header, subscriber)
     abort = function(self, msg)
       currentPosTraj = nil
     end,
-    completed = function()
+    completed = function(self)
       currentPosTraj = nil
     end
   }
