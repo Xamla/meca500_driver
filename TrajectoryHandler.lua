@@ -4,9 +4,9 @@ require 'TrajectorySampler'
 local meca500 = require 'meca500_env'
 
 
-local GOAL_CONVERGENCE_POSITION_THRESHOLD = 0.00051   -- in rad
-local GOAL_CONVERGENCE_VELOCITY_THRESHOLD = 0.001    -- in rad/s
-local MAX_CONVERGENCE_CYCLES = 50
+local GOAL_CONVERGENCE_POSITION_THRESHOLD = 0.005   -- in rad
+local GOAL_CONVERGENCE_VELOCITY_THRESHOLD = 0.01    -- in rad/s
+local MAX_CONVERGENCE_CYCLES = 100
 local LOOK_AHEAD_SECONDS = 0.5
 local MAX_VELOCITY_RAD = meca500.MAX_VELOCITY_RAD
 local MIN_VOLOCITY_RAD = meca500.MIN_VOLOCITY_RAD
@@ -125,7 +125,13 @@ function TrajectoryHandler:update()
     end
 
   else
-    if elapsed:toSec() >= self.sampler:getEndTime() and (reachedGoal(self) or not self.waitCovergence) then      -- when buffer is empty we are done
+
+    -- snap to goal
+    local q_goal = self.sampler:getGoalPosition()
+    self.controlStream:setJointVel(MAX_VELOCITY_RAD)
+    self.controlStream:moveJoints(q_goal)
+
+    if elapsed:toSec() >= self.sampler:getEndTime() and (reachedGoal(self) or not self.waitCovergence) then      -- wait for convergence
       self.status = TrajectoryHandlerStatus.Completed
       return false
     else
