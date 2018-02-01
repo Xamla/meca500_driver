@@ -172,6 +172,9 @@ local function FollowJointTrajectory_Goal(goalHandle)
         return false
       end
     end,
+    cancel = function(self)
+      goalHandle:setCancelRequested()
+    end,
     abort = function(self, msg)
       goalHandle:setAborted(nil, msg or 'Error')
     end,
@@ -207,7 +210,7 @@ local function FollowJointTrajectory_Cancel(goalHandle)
   ros.INFO('FollowJointTrajectory_Cancel')
 
   if driver.currentTrajectory ~= nil and driver.currentTrajectory.traj.goalHandle == goalHandle then
-    driver:cancelCurrentTrajectory('Canceled')
+    driver:cancelCurrentTrajectory()
   else
     -- check if trajectory is in trajectoryQueue
     local i = findIndex(driver.trajectoryQueue, function(x) return x.goalHandle == goalHandle end)
@@ -330,15 +333,12 @@ local function main()
   cmd:option('-hostname',              '192.168.0.100',   'hostname of robot to connect to')
   cmd:option('-control-port',                    10000,   'control port')
   cmd:option('-path-tolerance',           math.pi / 10,   'max set point distance to current joint configuration')
-  cmd:option('-controller-name',             'meca500',   'Emulation of ROS position controller')
-  cmd:option('-joint-name-prefix',                  '',   'Name prefix of published joints')
-  cmd:option('-auto-activation',                  true,   'Flag: Activate robot if it is turned off')
-  cmd:option('-auto-homing',                      true,   'Flag: Perform homing automatically')
+  cmd:option('-controller-name',             'meca500',   'emulation of ROS position controller')
+  cmd:option('-joint-name-prefix',                  '',   'name prefix of published joints')
+  cmd:option('-auto-activation',                  true,   'flag: Activate robot if it is turned off')
+  cmd:option('-auto-homing',                      true,   'flag: Perform homing automatically')
+  cmd:option('-max-convergence-cycles',            250,   'max number of cycles to wait for goal convergence')
   local opt = cmd:parse(arg or {})
-
-  -- ros initialization
-  ros.init('meca500_driver', nil, rosArgs)
-  nh = ros.NodeHandle('~')
 
   local logger = {
     debug = ros.DEBUG,
@@ -346,6 +346,11 @@ local function main()
     warn = ros.WARN,
     error = ros.ERROR
   }
+
+  -- ros initialization
+  local ros_init_options = 0
+  ros.init('meca500_driver', ros_init_options, rosArgs)
+  nh = ros.NodeHandle('~')
 
   local controllerName, ok = nh:getParamString('controller_name')
   if (ok == false) then
@@ -365,7 +370,8 @@ local function main()
     jointNamePrefix         = opt['joint-name-prefix'],
     autoActivation          = opt['auto-activation'],
     autoHoming              = opt['auto-homing'],
-    autoResetError          = opt['auto-reset-error']
+    autoResetError          = opt['auto-reset-error'],
+    maxConvergenceCycles    = opt['max-convergence-cycles']
   }
 
   local overrideInputArguments = function (key, value, ok)
@@ -382,6 +388,7 @@ local function main()
   overrideInputArguments('autoActivation', nh:getParamBool('auto_activation'))
   overrideInputArguments('autoHoming', nh:getParamBool('auto_homing'))
   overrideInputArguments('autoResetError', nh:getParamBool('auto_reset_error'))
+  overrideInputArguments('maxConvergenceCycles', nh:getParamInt('max_convergence_cycles'))
 
   -- print effective options
   print('Effective driver configuration:')

@@ -6,7 +6,8 @@ local meca500 = require 'meca500_env'
 
 local GOAL_CONVERGENCE_POSITION_THRESHOLD = 0.005   -- in rad
 local GOAL_CONVERGENCE_VELOCITY_THRESHOLD = 0.01    -- in rad/s
-local MAX_CONVERGENCE_CYCLES = 100
+local MAX_NO_RESPONSE = 100   -- number of cycles without avail count message from driver before entering ConnectionLost state
+local STOP_CYCLE_COUNT = 3  -- number of cycles with v < threshold before robot is considered stopped
 local LOOK_AHEAD_SECONDS = 0.5
 local MAX_VELOCITY_RAD = meca500.MAX_VELOCITY_RAD
 local MIN_VOLOCITY_RAD = meca500.MIN_VOLOCITY_RAD
@@ -19,6 +20,7 @@ local TrajectoryHandlerStatus = {
   Fresh = 0,
   Streaming = 1,
   Flushing = 2,
+  Cancelling = 3,     -- stop request has been sent to robot, waiting for zero velocity
   Completed = 1000,
 }
 meca500.TrajectoryHandlerStatus = TrajectoryHandlerStatus
@@ -27,17 +29,18 @@ meca500.TrajectoryHandlerStatus = TrajectoryHandlerStatus
 local TrajectoryHandler = torch.class('TrajectoryHandler')
 
 
-function TrajectoryHandler:__init(traj, controlStream, realtimeState, dt, logger)
+function TrajectoryHandler:__init(traj, controlStream, realtimeState, dt, maxConvergenceCycles, logger)
+  assert(maxConvergenceCycles > 0, "Argument 'maxConvergenceCycles' must be greater than zero.")
   self.traj = traj
   self.controlStream = controlStream
   self.realtimeState = realtimeState
   self.dt = dt
+  self.maxConvergenceCycles = maxConvergenceCycles
   self.logger = logger or ur5.DEFAULT_LOGGER
-  self.noResponse = 0
   self.status = TrajectoryHandlerStatus.Fresh
   self.sampler = TrajectorySampler(traj, dt)
-  self.noResponse = 0
   self.convergenceCycle = 0
+  self.noMotionCycle = 0
   self.startTime = ros.Time.now()
   self.flush = true
   self.waitCovergence = true
@@ -46,10 +49,26 @@ end
   
 
 function TrajectoryHandler:cancel()
-  if self.status > 0 then
+  if self.status > 0 and self.status ~= TrajectoryHandlerStatus.Cancelling then
     self.controlStream:clearMotion()    -- send stop message to robot
-    self.status = TrajectoryHandlerStatus.Canceled
+    self.status = TrajectoryHandlerStatus.Cancelling
   end
+end
+
+
+local function isRobotStopped(self)
+  return self.noMotionCycle > STOP_CYCLE_COUNT
+end
+
+
+local function checkRobotStopped(self)
+  local qd_actual = self.realtimeState.qd_actual
+  if qd_actual:norm() < GOAL_CONVERGENCE_VELOCITY_THRESHOLD then
+    self.noMotionCycle = self.noMotionCycle + 1
+  else
+    self.noMotionCycle = 0
+  end
+  return isRobotStopped(self)
 end
 
 
@@ -63,11 +82,11 @@ local function reachedGoal(self)
   self.logger.debug('Convergence cycle %d: |qd_actual|: %f; goal_distance (joints): %f;', self.convergenceCycle, qd_actual:norm(), goal_distance)
 
   self.convergenceCycle = self.convergenceCycle + 1
-  if self.convergenceCycle >= MAX_CONVERGENCE_CYCLES then
-    error(string.format('Did not reach goal after %d convergence cycles.', MAX_CONVERGENCE_CYCLES))
+  if self.convergenceCycle >= self.maxConvergenceCycles then
+    error(string.format('[TrajectoryHandler] Did not reach goal after %d convergence cycles. Goal distance: %f; |qd_actual|: %f;', self.maxConvergenceCycles, goal_distance, qd_actual:norm()))
   end
 
-  return qd_actual:norm() < GOAL_CONVERGENCE_VELOCITY_THRESHOLD and goal_distance < GOAL_CONVERGENCE_POSITION_THRESHOLD
+  return isRobotStopped(self) and goal_distance < GOAL_CONVERGENCE_POSITION_THRESHOLD
 end
 
 
@@ -76,7 +95,7 @@ function TrajectoryHandler:update()
     return false
   end
 
-  if self.sampler:atEnd() and self.flush == false then
+  if self.sampler:atEnd() and self.flush == false and self.status ~= TrajectoryHandlerStatus.Cancelling then
     self.status = TrajectoryHandlerStatus.Completed
     return false  -- all data sent, nothing to do
   end
@@ -84,7 +103,25 @@ function TrajectoryHandler:update()
   local now = ros.Time.now()
   local elapsed = now - self.startTime
 
-  if not self.sampler:atEnd() then
+  if self.status == TrajectoryHandlerStatus.Cancelling then
+    checkRobotStopped(self)
+
+    self.reverseConnection:sendPoints({})   -- send zero count
+
+    if checkRobotStopped(self) then    -- wait for robot to stop
+      self.status = TrajectoryHandlerStatus.Canceled
+      return false
+    else
+
+      -- check limited number of cycles and generate error when robot does not hold
+      self.convergenceCycle = self.convergenceCycle + 1
+      if self.convergenceCycle >= self.maxConvergenceCycles then
+        error(string.format('[TrajectoryHandler] Error: Robot did not stop after %d convergence cycles. Goal distance: %f; |qd_actual|: %f;', self.maxConvergenceCycles, goal_distance, qd_actual:norm()))
+      end
+
+    end
+
+  elseif not self.sampler:atEnd() then
     self.status = TrajectoryHandlerStatus.Streaming
     -- compute time of maximum lookahead trajectory point to send to robot
     local queueEndTime = (elapsed + LOOK_AHEAD_SECONDS):toSec()
@@ -125,6 +162,8 @@ function TrajectoryHandler:update()
     end
 
   else
+
+    checkRobotStopped(self)
 
     -- snap to goal
     local q_goal = self.sampler:getGoalPosition()

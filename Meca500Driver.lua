@@ -16,6 +16,7 @@ local MAX_SYNC_READ_TRIES = 250
 local DEFAULT_MAX_SINGLE_POINT_TRAJECTORY_DISTANCE = 0.5      -- max allowed distance of single point trajectory target relative to current joint pos
 local DEFAULT_HOSTNAME = '192.168.0.100'
 local DEFAULT_CONTROL_PORT = 10000
+local DEFAULT_MAX_CONVERGENCE_CYCLES = 150
 local JOINT_NAMES = meca500.JOINT_NAMES
 local JOINT_POSITION_LIMITS = meca500.JOINT_POSITION_LIMITS
 local JOINT_VELOCITY_LIMITS = meca500.JOINT_VELOCITY_LIMITS
@@ -38,6 +39,7 @@ function Meca500Driver:__init(cfg, logger, heartbeat)
   self.autoActivation = cfg.autoActivation
   self.autoHoming = cfg.autoHoming
   self.autoResetError = cfg.autoResetError
+  self.maxConvergenceCycles = cfg.maxConvergenceCycles or DEFAULT_MAX_CONVERGENCE_CYCLES
 
   self.activateSent = false
   self.homeSent = false
@@ -207,21 +209,23 @@ function Meca500Driver:createTrajectoryHandler(traj, flush, waitCovergence)
     self.controlStream,
     self.realtimeState,
     self.servoTime,
+    self.maxConvergenceCycles,
     self.logger
   )
 end
 
 
-function Meca500Driver:cancelCurrentTrajectory(abortMsg)
-  if self.currentTrajectory ~= nil then
-    self.logger.info('[Meca500Driver] Cancelling trajectory execution.')
-    local traj = self.currentTrajectory.traj
-    local handler = self.currentTrajectory.handler
-    handler:cancel()
-    self.currentTrajectory = nil
-    if traj.abort ~= nil then
-      traj:abort(abortMsg or 'Canceled')        -- abort callback (e.g. set goal canceled)
-    end
+function Meca500Driver:cancelCurrentTrajectory()
+  if self.currentTrajectory == nil then
+    return
+  end
+
+  self.logger.info('[Meca500Driver] Cancelling trajectory execution.')
+  local traj = self.currentTrajectory.traj
+  local handler = self.currentTrajectory.handler
+  handler:cancel()
+  if traj.cancel ~= nil then
+    traj:cancel()        -- cancel callback (e.g. enter canel requested state)
   end
 end
 
@@ -341,7 +345,7 @@ local function dispatchTrajectory(self)
 
     else
       -- robot not ready or proceed callback returned false
-      self:cancelCurrentTrajectory('Robot not ready or `proceed` callback function returned `false`.')
+      self:cancelCurrentTrajectory()
     end
   end
 
@@ -422,7 +426,7 @@ function Meca500Driver:spin()
   if not ok or self.controlStream:getState() == ControlStreamState.Error then
 
     -- abort current trajectory
-    if self.currentTrajectory then
+    if self.currentTrajectory ~= nil then
       local traj = self.currentTrajectory.traj
       if traj.abort ~= nil then
         traj:abort()
