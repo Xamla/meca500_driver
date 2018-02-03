@@ -106,8 +106,6 @@ function TrajectoryHandler:update()
   if self.status == TrajectoryHandlerStatus.Cancelling then
     checkRobotStopped(self)
 
-    self.reverseConnection:sendPoints({})   -- send zero count
-
     if checkRobotStopped(self) then    -- wait for robot to stop
       self.status = TrajectoryHandlerStatus.Canceled
       return false
