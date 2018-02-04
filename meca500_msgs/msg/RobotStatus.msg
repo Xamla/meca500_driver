@@ -1,0 +1,7 @@
+bool activated # motor operation state (`false` for inactive, `true` for active)
+bool homing_performed # homing state (`false` for homing not performed, `true` for homing performed)
+bool joint_feed # joint feed status (`false` for joint feed disabled, `true` for joint feed enabled)
+bool error # error status (`false` for robot not in error mode, `true` for robot in error mode)
+bool pose_feed # pose feed status (`false` for pose feed disabled, `true` for pose feed enabled)
+bool eob # end of block status (`false` for end of block disabled, `true` for end of block enabled)
+bool eom #end of movement status (`false` for end of movement disabled, `true` for end of movement enabled)

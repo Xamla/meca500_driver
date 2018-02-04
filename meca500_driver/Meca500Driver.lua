@@ -39,6 +39,7 @@ function Meca500Driver:__init(cfg, logger, heartbeat)
   self.autoActivation = cfg.autoActivation
   self.autoHoming = cfg.autoHoming
   self.autoResetError = cfg.autoResetError
+  self.autoParking = cfg.autoParking
   self.maxConvergenceCycles = cfg.maxConvergenceCycles or DEFAULT_MAX_CONVERGENCE_CYCLES
 
   self.activateSent = false
@@ -138,6 +139,26 @@ function Meca500Driver:blendTrajectory(traj)
 
     return traj_
   end
+end
+
+
+function Meca500Driver:activateRobot()
+  return self.controlStream:activateRobot()
+end
+
+
+function Meca500Driver:deactivateRobot()
+  return self.controlStream:deactivateRobot()
+end
+
+
+function Meca500Driver:home()
+  return self.controlStream:home()
+end
+
+
+function Meca500Driver:resetError()
+  return self.controlStream:resetError()
 end
 
 
@@ -370,7 +391,7 @@ local function driverCore(self)
   end
 
   if self.controlStream:getState() == ControlStreamState.Ready then
-    if self.realtimeState.status.error then
+    if self.realtimeState.robotStatus.error then
       -- robot is in error state
       if self.autoResetError and not self.resetErrorSent then
         self.logger.warn('Resetting error...')
@@ -380,19 +401,19 @@ local function driverCore(self)
     else
       -- robot is not in error state
       self.resetErrorSent = false
-      if not self.realtimeState.status.activated then
+      if not self.realtimeState.robotStatus.activated then
         if self.autoActivation and not self.activateSent then
           self.logger.info('Activating robot...')
           self.controlStream:activateRobot()
           self.activateSent = true
         end
-      elseif not self.realtimeState.status.homingPerformed then
+      elseif not self.realtimeState.robotStatus.homingPerformed then
         if self.autoHoming and not self.homeSent then
           self.logger.info('Homing...')
           self.controlStream:home()
           self.homeSent = true
         end
-      elseif not self.realtimeState.status.jointFeed then
+      elseif not self.realtimeState.robotStatus.jointFeed then
         self.logger.info('Activating joint feed...')
         self.controlStream:activateJointsFeed()
       end
@@ -460,14 +481,27 @@ end
 function Meca500Driver:shutdown()
   self.logger.info('Shutting down driver...')
   
-  self.logger.info('clearMotion')
-  self.controlStream:clearMotion()
-  sys.sleep(0.5)
-  self.controlStream:read()
-
   self.logger.info('deactivateJointsFeed')
   self.controlStream:deactivateJointsFeed()
-  sys.sleep(0.5)
+  sys.sleep(0.1)
+  self.controlStream:read()
+
+  self.logger.info('clearMotion')
+  self.controlStream:clearMotion()
+  sys.sleep(0.2)
+  self.controlStream:read()
+
+  if self.autoParking then
+    self.logger.info('Moving robot to park position...')
+    self.controlStream:setEob(1)
+    self.controlStream:setJointVel(meca500.MAX_VELOCITY_RAD * 0.5)
+    self.controlStream:moveJoints(torch.zeros(6))
+    self.controlStream:waitForEob(8.0)
+  end
+
+  self.logger.info('clearMotion')
+  self.controlStream:clearMotion()
+  sys.sleep(0.2)
   self.controlStream:read()
 
   self.logger.info('deactivateRobot')

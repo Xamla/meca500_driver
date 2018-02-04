@@ -1,0 +1,4 @@
+int32 command # open (1) or close (0) the gripper
+---
+bool success   # indicate successful run of operation
+string message # informational, e.g. for error messages

@@ -29,9 +29,9 @@ local function parseRobotStatus(self, code, message)
     error('Unexpected robot status response received')
   end
 
-  self.robotStatus = torch.IntTensor(status)
+  self.robotStatusRaw = torch.IntTensor(status)
 
-  local new_status = {
+  local robotStatus = {
     activated = (status[1] == 1),
     homingPerformed = (status[2] == 1),
     jointFeed = (status[3] == 1),
@@ -40,8 +40,8 @@ local function parseRobotStatus(self, code, message)
     eob = (status[6] == 1),
     eom = (status[7] == 1)
   }
-  self.status = new_status
-
+  self.robotStatus = robotStatus
+  self.robotStatusTime = ros.Time.now()
 end
 
 
@@ -50,7 +50,19 @@ local function parseGripperStatus(self, code, message)
   if #status < 6 then
     error('Unexpected gripper status response received')
   end
-  self.gripperStatus = torch.IntTensor(status)
+
+  self.gripperStatusRaw = torch.IntTensor(status)
+
+  local gripperStatus = {
+    gripperEnabled = (status[1] == 1),
+    homingDone = (status[2] == 1),
+    holdingPart = (status[3] == 1),
+    limitReached = (status[4] == 1),
+    generalError = (status[5] == 1),
+    overload = (status[6] == 1)
+  }
+  self.gripperStatus = gripperStatus
+  self.gripperStatusTime = ros.Time.now()
 end
 
 
@@ -78,13 +90,13 @@ end
 
 
 function RealtimeState:__init()
-  self.robotStatus = torch.IntTensor(7):zero()            -- numeric robot status vector
-  self.gripperStatus = torch.IntTensor(6):zero()          -- numeric gripper status vector
+  self.robotStatusRaw = torch.IntTensor(7):zero()         -- numeric robot status vector
+  self.gripperStatusRaw = torch.IntTensor(6):zero()       -- numeric gripper status vector
   self.q_actual = torch.DoubleTensor(6):zero()            -- Actual joint positions (in rad)
   self.qd_actual = torch.DoubleTensor(6):zero()
 
   -- decoded fields of robot status vector
-  self.status = {
+  self.robotStatus = {
     activated = false,            -- motor operation state 
     homingPerformed = false,      -- homing state (`false` for homing not performed, `true` for homing performed)
     jointFeed = false,            -- jointFeed status (`false` for joint feed disabled, `true` for joint feed enabled)
@@ -92,6 +104,14 @@ function RealtimeState:__init()
     poseFeed = false,             -- pose feed status (`false` for pose feed disabled, `true` for pose feed enabled)
     eob = false,                  -- end of block status (`false` for end of block disabled, `true` for end of block enabled)
     eom = false                   -- ond of movement status (`false` for end of movement disabled, `true` for end of movement
+  }
+  self.gripperStatus = {
+    gripperEnabled = false,
+    homingDone = false,
+    holdingPart = false,
+    limitReached = false,
+    generalError = false,
+    overload = false
   }
   self:invalidate()
 
@@ -110,7 +130,7 @@ end
   
   
 function RealtimeState:isRobotReady()
-  local status = self.status
+  local status = self.robotStatus
   return self.valid and status.activated and status.jointFeed and not status.error
 end
 

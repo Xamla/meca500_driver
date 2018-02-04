@@ -1,0 +1,4 @@
+float64 max_force_factor # grip force limit factor, ranging from 0-1 (1 meaning ~ 40 N)
+---
+bool success   # indicate successful run of operation
+string message # informational, e.g. for error messages

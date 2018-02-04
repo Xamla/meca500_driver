@@ -40,7 +40,33 @@ function ControlStream:__init(realtimeState, logger)
   self.client = socket.tcp()
   self.client:setoption('tcp-nodelay', true)
   self.state = ControlStreamState.Disconnected
+  self.commandHandlers = {}
   resetStash(self, '')
+end
+
+
+local function indexOf(t, v)
+  for i=1,#t do
+    if t[i] == v then
+      return i
+    end
+  end
+  return -1
+end
+
+
+local function addHandler(self, handler)
+  if indexOf(self.commandHandlers, handler) < 1 then
+    self.commandHandlers[#self.commandHandlers + 1] = handler
+  end
+end
+
+
+local function removeHandler(self, handler)
+  local i = indexOf(self.commandHandlers, handler)
+  if i > 0 then
+    table.remove(self.commandHandlers, i)
+  end
 end
 
 
@@ -165,6 +191,8 @@ function ControlStream:read()
       end
     end
     return false
+  elseif self.state ~= ControlStreamState.Ready then
+    return false
   end
 
   while true do
@@ -175,6 +203,10 @@ function ControlStream:read()
 
     -- print(code, msg)
     self.realtimeState:parseResponse(code, msg)
+
+    for i,handler in ipairs(self.commandHandlers) do
+      handler:parseResponse(code, msg)
+    end
   end
 
   return true
@@ -188,7 +220,7 @@ end
 
 function ControlStream:requestStatus()
   local req = 'GetStatusRobot\0'
-  if self.realtimeState.status.activated then
+  if self.realtimeState.robotStatus.activated then
     req = req .. 'GetGripperStatus\0'
   end
   return self:send(req)
@@ -224,10 +256,48 @@ function ControlStream:clearMotion()
 end
 
 
+function ControlStream:setEob(flag)
+  if type(flag) == 'boolean' then
+    flag = flag and 1 or false
+  end
+  return self:send(string.format('SetEOB(%d)\0', flag))
+end
+
+
+function ControlStream:setEom(flag)
+  if type(flag) == 'boolean' then
+    flag = flag and 1 or false
+  end
+  return self:send(string.format('SetEOM(%d)\0', flag))
+end
+
+
+function ControlStream:waitForEob(timeoutSeconds)
+  assert(timeoutSeconds ~= nil, "Argument must not be nil: 'timeoutSeconds'")
+
+  local eobReceived = false
+  local handler = {
+    parseResponse = function (self, code, msg)
+      if code == ResponseCode.EndOfBlock then
+        eobReceived = true
+      end
+    end
+  }
+  
+  local timeoutEnd = sys.clock() + timeoutSeconds
+  addHandler(self, handler)
+  while self:read() and not eobReceived and sys.clock() < timeoutEnd do
+    sys.sleep(0.02)
+  end
+  removeHandler(self, handler)
+  return eobReceived
+end
+
+
 function ControlStream:home()
 
   local handler = {
-    parseResponse = function (code, msg)
+    parseResponse = function (self, code, msg)
       if code == 2002 then
         --[2002][Homing done.]
         --[2003][Homing already done.]

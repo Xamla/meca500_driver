@@ -1,0 +1,4 @@
+float64 max_velocity # finger velocity limit im m/s (ranging from 2 to 95 mm/s)
+---
+bool success   # indicate successful run of operation
+string message # informational, e.g. for error messages
