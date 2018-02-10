@@ -439,6 +439,8 @@ local function main()
   cmd:option('-auto-reset-error',                false,   'flag: Try to reset error during init')
   cmd:option('-auto-parking',                    false,   'flag: Move robot to home position on shutdown')
   cmd:option('-max-convergence-cycles',            250,   'max number of cycles to wait for goal convergence')
+  cmd:option('-goal-position-threshold',         0.005,   'goal convergence position threshold (in rad)')
+  cmd:option('-goal-velocity-threshold',          0.01,   'goal convergence velocity threshold (in rad/s)')
   local opt = cmd:parse(arg or {})
 
   local logger = {
@@ -467,7 +469,9 @@ local function main()
     autoHoming              = opt['auto-homing'],
     autoResetError          = opt['auto-reset-error'],
     autoParking             = opt['auto-parking'],
-    maxConvergenceCycles    = opt['max-convergence-cycles']
+    maxConvergenceCycles    = opt['max-convergence-cycles'],
+    goalPositionThreshold   = opt['goal-position-threshold'],
+    goalVelocityThreshold   = opt['goal-velocity-threshold']
   }
 
   local overrideInputArguments = function (key, value, ok)
@@ -486,6 +490,8 @@ local function main()
   overrideInputArguments('autoResetError', nh:getParamBool('auto_reset_error'))
   overrideInputArguments('autoParking', nh:getParamBool('auto_parking'))
   overrideInputArguments('maxConvergenceCycles', nh:getParamInt('max_convergence_cycles'))
+  overrideInputArguments('goalPositionThreshold', nh:getParamDouble('goal_position_threshold'))
+  overrideInputArguments('goalVelocityThreshold', nh:getParamDouble('goal_velocity_threshold'))
 
   -- print effective options
   print('Effective driver configuration:')

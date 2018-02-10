@@ -4,8 +4,6 @@ require 'TrajectorySampler'
 local meca500 = require 'meca500_env'
 
 
-local GOAL_CONVERGENCE_POSITION_THRESHOLD = 0.005   -- in rad
-local GOAL_CONVERGENCE_VELOCITY_THRESHOLD = 0.01    -- in rad/s
 local MAX_NO_RESPONSE = 100   -- number of cycles without avail count message from driver before entering ConnectionLost state
 local STOP_CYCLE_COUNT = 3  -- number of cycles with v < threshold before robot is considered stopped
 local LOOK_AHEAD_SECONDS = 0.5
@@ -29,13 +27,20 @@ meca500.TrajectoryHandlerStatus = TrajectoryHandlerStatus
 local TrajectoryHandler = torch.class('TrajectoryHandler')
 
 
-function TrajectoryHandler:__init(traj, controlStream, realtimeState, dt, maxConvergenceCycles, logger)
+function TrajectoryHandler:__init(traj, controlStream, realtimeState, dt,
+  maxConvergenceCycles, goalPositionThreshold, goalVelocityThreshold, logger)
+
   assert(maxConvergenceCycles > 0, "Argument 'maxConvergenceCycles' must be greater than zero.")
+  assert(goalPositionThreshold > 0, "Argument 'goalPositionThreshold' must be greater than zero.")
+  assert(goalVelocityThreshold >= 0, "Argument 'goalVelocityThreshold' must be greater than or equal zero.")
+
   self.traj = traj
   self.controlStream = controlStream
   self.realtimeState = realtimeState
   self.dt = dt
   self.maxConvergenceCycles = maxConvergenceCycles
+  self.goalPositionThreshold = goalPositionThreshold
+  self.goalVelocityThreshold = goalVelocityThreshold
   self.logger = logger or ur5.DEFAULT_LOGGER
   self.status = TrajectoryHandlerStatus.Fresh
   self.sampler = TrajectorySampler(traj, dt)
@@ -63,7 +68,7 @@ end
 
 local function checkRobotStopped(self)
   local qd_actual = self.realtimeState.qd_actual
-  if qd_actual:norm() < GOAL_CONVERGENCE_VELOCITY_THRESHOLD then
+  if qd_actual:norm() < self.goalVelocityThreshold then
     self.noMotionCycle = self.noMotionCycle + 1
   else
     self.noMotionCycle = 0
@@ -86,7 +91,7 @@ local function reachedGoal(self)
     error(string.format('[TrajectoryHandler] Did not reach goal after %d convergence cycles. Goal distance: %f; |qd_actual|: %f;', self.maxConvergenceCycles, goal_distance, qd_actual:norm()))
   end
 
-  return isRobotStopped(self) and goal_distance < GOAL_CONVERGENCE_POSITION_THRESHOLD
+  return isRobotStopped(self) and goal_distance < self.goalPositionThreshold
 end
 
 

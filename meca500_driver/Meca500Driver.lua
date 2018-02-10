@@ -20,6 +20,8 @@ local DEFAULT_MAX_CONVERGENCE_CYCLES = 150
 local JOINT_NAMES = meca500.JOINT_NAMES
 local JOINT_POSITION_LIMITS = meca500.JOINT_POSITION_LIMITS
 local JOINT_VELOCITY_LIMITS = meca500.JOINT_VELOCITY_LIMITS
+local DEFAULT_GOAL_CONVERGENCE_POSITION_THRESHOLD = 0.005 -- in rad
+local DEFAULT_GOAL_CONVERGENCE_VELOCITY_THRESHOLD = 0.01 -- in rad/s
 
 
 local Meca500Driver = torch.class('Meca500Driver')
@@ -35,12 +37,13 @@ function Meca500Driver:__init(cfg, logger, heartbeat)
   self.pathTolerance = cfg.pathTolerance or DEFAULT_PATH_TOLERANCE
   self.maxSinglePointTrajectoryDistance = cfg.maxSinglePointTrajectoryDistance or DEFAULT_MAX_SINGLE_POINT_TRAJECTORY_DISTANCE
   self.jointNamePrefix = cfg.jointNamePrefix
-
   self.autoActivation = cfg.autoActivation
   self.autoHoming = cfg.autoHoming
   self.autoResetError = cfg.autoResetError
   self.autoParking = cfg.autoParking
   self.maxConvergenceCycles = cfg.maxConvergenceCycles or DEFAULT_MAX_CONVERGENCE_CYCLES
+  self.goalPositionThreshold = cfg.goalPositionThreshold or DEFAULT_GOAL_CONVERGENCE_POSITION_THRESHOLD
+  self.goalVelocityThreshold = cfg.goalVelocityThreshold or DEFAULT_GOAL_CONVERGENCE_VELOCITY_THRESHOLD
 
   self.activateSent = false
   self.homeSent = false
@@ -231,6 +234,8 @@ function Meca500Driver:createTrajectoryHandler(traj, flush, waitCovergence)
     self.realtimeState,
     self.servoTime,
     self.maxConvergenceCycles,
+    self.goalPositionThreshold,
+    self.goalVelocityThreshold,
     self.logger
   )
 end
