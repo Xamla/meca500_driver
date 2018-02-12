@@ -560,6 +560,7 @@ local function main()
   driver:shutdown()
   nh:shutdown()
   ros.shutdown()
+  print('Shutdown complete.')
 end
 
 

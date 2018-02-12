@@ -486,33 +486,35 @@ end
 function Meca500Driver:shutdown()
   self.logger.info('Shutting down driver...')
   
-  self.logger.info('deactivateJointsFeed')
-  self.controlStream:deactivateJointsFeed()
-  sys.sleep(0.1)
-  self.controlStream:read()
+  if self.controlStream:getState() == ControlStreamState.Ready then
+    self.logger.info('deactivateJointsFeed')
+    self.controlStream:deactivateJointsFeed()
+    sys.sleep(0.1)
+    self.controlStream:read()
 
-  self.logger.info('clearMotion')
-  self.controlStream:clearMotion()
-  sys.sleep(0.2)
-  self.controlStream:read()
+    self.logger.info('clearMotion')
+    self.controlStream:clearMotion()
+    sys.sleep(0.2)
+    self.controlStream:read()
 
-  if self.autoParking then
-    self.logger.info('Moving robot to park position...')
-    self.controlStream:setEob(1)
-    self.controlStream:setJointVel(meca500.MAX_VELOCITY_RAD * 0.5)
-    self.controlStream:moveJoints(torch.zeros(6))
-    self.controlStream:waitForEob(8.0)
+    if self.autoParking then
+      self.logger.info('Moving robot to park position...')
+      self.controlStream:setEob(1)
+      self.controlStream:setJointVel(meca500.MAX_VELOCITY_RAD * 0.5)
+      self.controlStream:moveJoints(torch.zeros(6))
+      self.controlStream:waitForEob(8.0)
+    end
+
+    self.logger.info('clearMotion')
+    self.controlStream:clearMotion()
+    sys.sleep(0.2)
+    self.controlStream:read()
+
+    self.logger.info('deactivateRobot')
+    self.controlStream:deactivateRobot()
+    sys.sleep(0.5)
+    self.controlStream:read()
   end
-
-  self.logger.info('clearMotion')
-  self.controlStream:clearMotion()
-  sys.sleep(0.2)
-  self.controlStream:read()
-
-  self.logger.info('deactivateRobot')
-  self.controlStream:deactivateRobot()
-  sys.sleep(0.5)
-  self.controlStream:read()
 
   self.logger.info('Closing control stream.')
   self.controlStream:close()
