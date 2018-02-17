@@ -2,7 +2,7 @@
 <package>
   <name>meca500_msgs</name>
   <version>0.0.0</version>
-  <license>BSD</license>
+  <license>GPL</license>
   <description>The meca500_msgs package</description>
   <maintainer email="andreas.koepf@xamla.com">Andreas Koepf</maintainer>
   <author email="andreas.koepf@xamla.com">Andreas Koepf</author>
