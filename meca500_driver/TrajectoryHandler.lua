@@ -33,7 +33,7 @@ function TrajectoryHandler:__init(traj, controlStream, realtimeState, dt,
   assert(maxConvergenceCycles > 0, "Argument 'maxConvergenceCycles' must be greater than zero.")
   assert(goalPositionThreshold > 0, "Argument 'goalPositionThreshold' must be greater than zero.")
   assert(goalVelocityThreshold >= 0, "Argument 'goalVelocityThreshold' must be greater than or equal zero.")
-
+  self.lastJointStateStamp = realtimeState.q_actual_time
   self.traj = traj
   self.controlStream = controlStream
   self.realtimeState = realtimeState
@@ -51,7 +51,7 @@ function TrajectoryHandler:__init(traj, controlStream, realtimeState, dt,
   self.waitCovergence = true
   self.singleWaypoint = traj.singleWaypoint or (traj.time:size(1) == 1)
 end
-  
+
 
 function TrajectoryHandler:cancel()
   if self.status > 0 and self.status ~= TrajectoryHandlerStatus.Cancelling then
@@ -125,6 +125,11 @@ function TrajectoryHandler:update()
     end
 
   elseif not self.sampler:atEnd() then
+    if self.lastJointStateStamp >= self.realtimeState.q_actual_time then
+      self.logger.debug('no fresh state update received')
+      return
+    end
+    self.lastJointStateStamp = self.realtimeState.q_actual_time
     self.status = TrajectoryHandlerStatus.Streaming
     -- compute time of maximum lookahead trajectory point to send to robot
     local queueEndTime = (elapsed + LOOK_AHEAD_SECONDS):toSec()
@@ -139,10 +144,12 @@ function TrajectoryHandler:update()
       if self.singleWaypoint then
         local delta = q_desired - q_actual
         -- compute the minimum time when target will be reached (assume max cruising speed)
-        local minTime = torch.cdiv(delta, meca500.JOINT_VELOCITY_LIMITS[{{},2}]):abs():max()
+        local age = (ros.Time.now() - self.realtimeState.q_actual_time):toSec()
+        local minTime = math.max(torch.cdiv(delta, meca500.JOINT_VELOCITY_LIMITS[{{},2}]):abs():max() - age, 0)
         if delta:norm() > 1e-5 and minTime > 2 * self.dt then
           -- truncate goal
-          q_desired = q_actual + delta * (2 * self.dt / minTime)
+          self.logger.debug('truncate goal: %f, joint state age %f', 2 * self.dt / minTime, age)
+          q_desired = q_actual + delta * math.min(1, 2 * self.dt / minTime)
         end
         velocity = MAX_VELOCITY_RAD   -- use maximum velocity for single waypoints
       else

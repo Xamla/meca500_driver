@@ -53,7 +53,7 @@ function Meca500Driver:__init(cfg, logger, heartbeat)
   self.controlStream = ControlStream(self.realtimeState, self.logger)
   self.syncCallbacks = {}
   self.trajectoryQueue = {}      -- list of pending trajectories
-  self.servoTime = 1/100
+  self.servoTime = 1/66
 end
 
 
@@ -475,7 +475,7 @@ function Meca500Driver:spin()
 
     self.logger.warn('Closing robot communication socket and reconnecting. (RT state: %d)', self.controlStream:getState())
     self:shutdown()
-    
+
     self.realtimeState:invalidate()
     self.controlStream = ControlStream(self.realtimeState, self.logger)
   end
@@ -485,7 +485,7 @@ end
 
 function Meca500Driver:shutdown()
   self.logger.info('Shutting down driver...')
-  
+
   if self.controlStream:getState() == ControlStreamState.Ready then
     self.logger.info('deactivateJointsFeed')
     self.controlStream:deactivateJointsFeed()
