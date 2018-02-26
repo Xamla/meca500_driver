@@ -131,28 +131,37 @@ function TrajectoryHandler:update()
     end
     self.lastJointStateStamp = self.realtimeState.q_actual_time
     self.status = TrajectoryHandlerStatus.Streaming
-    -- compute time of maximum lookahead trajectory point to send to robot
-    local queueEndTime = (elapsed + LOOK_AHEAD_SECONDS):toSec()
-    local q_last = self.sampler:evaluateAt(self.sampler:getCurrentTime())
-    local pos,vel = self.sampler:generatePointsUntil(queueEndTime)
-    local q_actual = self.realtimeState.q_actual
-    local velocity = MAX_VELOCITY_RAD   -- scalar value used for all joints (2x for j4-j6)
 
-    -- send points to robot
-    for i,q_desired in ipairs(pos) do
+    if self.singleWaypoint then
 
-      if self.singleWaypoint then
-        local delta = q_desired - q_actual
-        -- compute the minimum time when target will be reached (assume max cruising speed)
-        local age = (ros.Time.now() - self.realtimeState.q_actual_time):toSec()
-        local minTime = math.max(torch.cdiv(delta, meca500.JOINT_VELOCITY_LIMITS[{{},2}]):abs():max() - age, 0)
-        if delta:norm() > 1e-5 and minTime > 2 * self.dt then
-          -- truncate goal
-          self.logger.debug('truncate goal: %f, joint state age %f', 2 * self.dt / minTime, age)
-          q_desired = q_actual + delta * math.min(1, 2 * self.dt / minTime)
-        end
-        velocity = MAX_VELOCITY_RAD   -- use maximum velocity for single waypoints
-      else
+      local q_actual = self.realtimeState.q_actual
+      local q_desired = self.sampler:evaluateAt(elapsed:toSec())
+      self.sampler.t = elapsed:toSec()
+
+      local delta = q_desired - q_actual
+      -- compute the minimum time when target will be reached (assume max cruising speed)
+      local age = (ros.Time.now() - self.realtimeState.q_actual_time):toSec()
+      local minTime = math.max(torch.cdiv(delta, meca500.JOINT_VELOCITY_LIMITS[{{},2}]):abs():max() - age, 0)
+      if delta:norm() > 1e-5 and minTime > 2 * self.dt then
+        -- truncate goal
+        self.logger.debug('truncate goal: %f, joint state age %f', 2 * self.dt / minTime, age)
+        q_desired = q_actual + delta * 2 * self.dt / minTime
+      end
+
+      local velocity = MAX_VELOCITY_RAD   -- use maximum velocity for single waypoints
+      self.controlStream:setJointVel(velocity)
+      self.controlStream:moveJoints(q_desired)
+
+    else
+
+      local q_last = self.sampler:evaluateAt(self.sampler:getCurrentTime())
+      -- compute time of maximum lookahead trajectory point to send to robot
+      local queueEndTime = (elapsed + LOOK_AHEAD_SECONDS):toSec()
+      local pos,vel = self.sampler:generatePointsUntil(queueEndTime)
+
+      -- send points to robot
+      for i,q_desired in ipairs(pos) do
+
         -- estimate required time to reach next setpoint
         local delta = q_desired - q_last
         local qd_desired = torch.abs(vel[i])        -- work with absolute velocity
@@ -163,12 +172,12 @@ function TrajectoryHandler:update()
           -- computed waypoint velocity value is too low
           qd_safe:mul(minTime/self.dt):clamp(MIN_VOLOCITY_RAD, MAX_VELOCITY_RAD)
         end
-        velocity = qd_safe:max()
+        local velocity = qd_safe:max()
+        self.controlStream:setJointVel(velocity)
+        self.controlStream:moveJoints(q_desired)
+        q_last = q_desired
       end
 
-      self.controlStream:setJointVel(velocity)
-      self.controlStream:moveJoints(q_desired)
-      q_last = q_desired
     end
 
   else
