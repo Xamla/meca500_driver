@@ -95,6 +95,21 @@ local function reachedGoal(self)
 end
 
 
+local function clipping(self, q_desired)
+  local q_actual = self.realtimeState.q_actual
+  local delta = q_desired - q_actual
+  -- compute the minimum time when target will be reached (assume max cruising speed)
+  local age = (ros.Time.now() - self.realtimeState.q_actual_time):toSec()
+  local minTime = math.max(torch.cdiv(delta, meca500.JOINT_VELOCITY_LIMITS[{{},2}]):abs():max() - age, 0)
+  if delta:norm() > 1e-5 and minTime > 2 * self.dt then
+    -- truncate goal
+    self.logger.debug('truncate goal: %f, joint state age %f', 2 * self.dt / minTime, age)
+    q_desired = q_actual + delta * 2 * self.dt / minTime
+  end
+  return q_desired
+end
+
+
 function TrajectoryHandler:update()
   if self.status < 0 or self.status == TrajectoryHandlerStatus.Completed then
     return false
@@ -107,6 +122,11 @@ function TrajectoryHandler:update()
 
   local now = ros.Time.now()
   local elapsed = now - self.startTime
+
+  if self.lastJointStateStamp >= self.realtimeState.q_actual_time then
+    return
+  end
+  self.lastJointStateStamp = self.realtimeState.q_actual_time
 
   if self.status == TrajectoryHandlerStatus.Cancelling then
     checkRobotStopped(self)
@@ -125,28 +145,13 @@ function TrajectoryHandler:update()
     end
 
   elseif not self.sampler:atEnd() then
-    if self.lastJointStateStamp >= self.realtimeState.q_actual_time then
-      self.logger.debug('no fresh state update received')
-      return
-    end
-    self.lastJointStateStamp = self.realtimeState.q_actual_time
     self.status = TrajectoryHandlerStatus.Streaming
-
     if self.singleWaypoint then
 
-      local q_actual = self.realtimeState.q_actual
       local q_desired = self.sampler:evaluateAt(elapsed:toSec())
       self.sampler.t = elapsed:toSec()
 
-      local delta = q_desired - q_actual
-      -- compute the minimum time when target will be reached (assume max cruising speed)
-      local age = (ros.Time.now() - self.realtimeState.q_actual_time):toSec()
-      local minTime = math.max(torch.cdiv(delta, meca500.JOINT_VELOCITY_LIMITS[{{},2}]):abs():max() - age, 0)
-      if delta:norm() > 1e-5 and minTime > 2 * self.dt then
-        -- truncate goal
-        self.logger.debug('truncate goal: %f, joint state age %f', 2 * self.dt / minTime, age)
-        q_desired = q_actual + delta * 2 * self.dt / minTime
-      end
+      q_desired = clipping(self, q_desired)
 
       local velocity = MAX_VELOCITY_RAD   -- use maximum velocity for single waypoints
       self.controlStream:setJointVel(velocity)
@@ -186,6 +191,11 @@ function TrajectoryHandler:update()
 
     -- snap to goal
     local q_goal = self.sampler:getGoalPosition()
+
+    if self.singleWaypoint then
+      q_goal = clipping(self, q_goal)
+    end
+
     self.controlStream:setJointVel(MAX_VELOCITY_RAD)
     self.controlStream:moveJoints(q_goal)
 
