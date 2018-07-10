@@ -1,3 +1,23 @@
+--[[
+This file is part of the driver for Meca 500 robots.
+Copyright (C) 2018 Xamla and/or its affiliates
+
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2
+of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+]]
+
+
 local torch = require 'torch'
 local ros = require 'ros'
 local meca500 = require 'meca500_env'
@@ -72,7 +92,7 @@ local function parseJointAngles(self, code, message)
   if #q < 6 then
     error('Invalid joint angles received')
   end
-  
+
   local q_last = self.q_actual
   self.q_actual = torch.DoubleTensor(q) * math.pi / 180
   if self.q_actual_time ~= nil then
@@ -97,7 +117,7 @@ function RealtimeState:__init()
 
   -- decoded fields of robot status vector
   self.robotStatus = {
-    activated = false,            -- motor operation state 
+    activated = false,            -- motor operation state
     homingPerformed = false,      -- homing state (`false` for homing not performed, `true` for homing performed)
     jointFeed = false,            -- jointFeed status (`false` for joint feed disabled, `true` for joint feed enabled)
     error = false,                -- error status (`false` for robot not in error mode, `true` for robot in error mode)
@@ -127,8 +147,8 @@ end
 function RealtimeState:isValid()
   return self.valid
 end
-  
-  
+
+
 function RealtimeState:isRobotReady()
   local status = self.robotStatus
   return self.valid and status.activated and status.jointFeed and not status.error

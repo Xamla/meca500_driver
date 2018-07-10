@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package>
   <name>meca500_msgs</name>
-  <version>0.0.0</version>
-  <license>GPL</license>
+  <version>0.1.0</version>
+  <license>GPLv2</license>
   <description>The meca500_msgs package</description>
   <maintainer email="andreas.koepf@xamla.com">Andreas Koepf</maintainer>
   <author email="andreas.koepf@xamla.com">Andreas Koepf</author>

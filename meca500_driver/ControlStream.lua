@@ -1,3 +1,22 @@
+--[[
+This file is part of the driver for Meca 500 robots.
+Copyright (C) 2018 Xamla and/or its affiliates
+
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2
+of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+]]
+
 local socket = require 'socket'
 local sys = require 'sys'
 local meca500 = require 'meca500_env'
@@ -126,7 +145,7 @@ local function nextResponseString(self)
       self.remaining = ''
     end
     return msg
-    
+
   end
   return nil
 end
@@ -283,7 +302,7 @@ function ControlStream:waitForEob(timeoutSeconds)
       end
     end
   }
-  
+
   local timeoutEnd = sys.clock() + timeoutSeconds
   addHandler(self, handler)
   while self:read() and not eobReceived and sys.clock() < timeoutEnd do
@@ -315,8 +334,8 @@ function ControlStream:moveJoints(q)
     'Invalid argument: Joint setpoint is nil or in invalid shape (6D tensor expected).'
   )
   local cmd = string.format("MoveJoints(%f,%f,%f,%f,%f,%f)\0",
-    math.deg(q[1]), math.deg(q[2]), 
-    math.deg(q[3]), math.deg(q[4]), 
+    math.deg(q[1]), math.deg(q[2]),
+    math.deg(q[3]), math.deg(q[4]),
     math.deg(q[5]), math.deg(q[6])
   )
   assert(

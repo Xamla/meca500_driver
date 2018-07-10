@@ -1,4 +1,24 @@
 #!/usr/bin/env th
+
+--[[
+This file is part of the driver for Meca 500 robots.
+Copyright (C) 2018 Xamla and/or its affiliates
+
+This program is free software; you can redistribute it and/or
+modify it under the terms of the GNU General Public License
+as published by the Free Software Foundation; either version 2
+of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+]]
+
 local torch = require 'torch'
 local ros = require 'ros'
 require 'Meca500Driver'
@@ -462,7 +482,7 @@ local function main()
   local driverConfiguration = {
     hostname                = opt['hostname'],
     controlPort             = opt['control-port'],
-    pathTolerance           = opt['path-tolerance'],      
+    pathTolerance           = opt['path-tolerance'],
     maxSinglePointTrajectoryDistance = opt['max-single-point-trajectory-distance'],
     jointNamePrefix         = opt['joint-name-prefix'],
     autoActivation          = opt['auto-activation'],
